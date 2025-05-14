@@ -11,7 +11,7 @@
     <div class="container">
         <header>
             <h1>Name Matching Tool</h1>
-            <p>Match names between two systems easily and efficiently</p>
+            <p>Match names between two systems with manual selection</p>
         </header>
 
         <div class="input-container">
@@ -60,22 +60,10 @@
                         <input type="checkbox" id="trim-whitespace" checked>
                         <label for="trim-whitespace">Trim whitespace</label>
                     </div>
-                    <div class="option">
-                        <input type="checkbox" id="fuzzy-matching">
-                        <label for="fuzzy-matching">Fuzzy matching</label>
-                    </div>
-                </div>
-                <div class="algo-selector">
-                    <label for="algorithm">Matching Algorithm:</label>
-                    <select id="algorithm">
-                        <option value="exact">Exact Match</option>
-                        <option value="levenshtein">Levenshtein Distance</option>
-                        <option value="soundex">Soundex</option>
-                    </select>
                 </div>
             </div>
             <button class="btn btn-primary" id="match-btn">
-                <i class="fas fa-link"></i> Match Names
+                <i class="fas fa-link"></i> Find Matches
             </button>
         </div>
 
@@ -83,16 +71,16 @@
             <h2>Matching Results</h2>
             <div class="stats-panel">
                 <div class="stat-box">
-                    <span class="stat-label">Matched</span>
-                    <span class="stat-value" id="matched-count">0</span>
+                    <span class="stat-label">Exact Matches</span>
+                    <span class="stat-value" id="exact-count">0</span>
                 </div>
                 <div class="stat-box">
-                    <span class="stat-label">Unmatched</span>
-                    <span class="stat-value" id="unmatched-count">0</span>
+                    <span class="stat-label">Require Manual</span>
+                    <span class="stat-value" id="manual-count">0</span>
                 </div>
                 <div class="stat-box">
-                    <span class="stat-label">Match Rate</span>
-                    <span class="stat-value" id="match-rate">0%</span>
+                    <span class="stat-label">Progress</span>
+                    <span class="stat-value" id="progress-rate">0%</span>
                 </div>
             </div>
             <div class="results-actions">
@@ -109,7 +97,7 @@
                         <tr>
                             <th>System 1 Name</th>
                             <th>System 2 Match</th>
-                            <th>Confidence</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="results-body">
@@ -120,7 +108,7 @@
         </div>
         
         <footer>
-            <p>© 2025 Name Matching Tool | Created with <i class="fas fa-heart"></i> by Vladislav</p>
+            <p>© 2025 Name Matching Tool | User: wolketich</p>
         </footer>
     </div>
     <script src="script.js"></script>

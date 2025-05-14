@@ -54,6 +54,12 @@ header h1 {
 header p {
   font-size: 1.1rem;
   opacity: 0.9;
+  margin-bottom: 0.5rem;
+}
+
+.timestamp {
+  font-size: 0.9rem;
+  opacity: 0.8;
 }
 
 .input-container {
@@ -149,6 +155,15 @@ textarea:focus {
   background-color: var(--medium-gray);
 }
 
+.btn-success {
+  background-color: var(--success-color);
+  color: white;
+}
+
+.btn-success:hover {
+  background-color: #37a84e;
+}
+
 .action-panel {
   padding: 1.5rem;
   background-color: var(--primary-light);
@@ -180,26 +195,6 @@ textarea:focus {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.algo-selector {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.algo-selector label {
-  font-size: 1rem;
-  font-weight: 500;
-}
-
-select {
-  padding: 0.5rem;
-  border: 1px solid var(--medium-gray);
-  border-radius: var(--border-radius);
-  font-size: 0.9rem;
-  background-color: white;
-  min-width: 180px;
 }
 
 .results-container {
@@ -275,23 +270,9 @@ select {
   background-color: var(--primary-light);
 }
 
-.match-confidence-high {
+.exact-match {
   color: var(--success-color);
   font-weight: 600;
-}
-
-.match-confidence-medium {
-  color: var(--warning-color);
-  font-weight: 500;
-}
-
-.match-confidence-low {
-  color: var(--danger-color);
-}
-
-.no-match {
-  color: var(--danger-color);
-  font-style: italic;
 }
 
 footer {
@@ -302,8 +283,59 @@ footer {
   font-size: 0.9rem;
 }
 
-footer i {
-  color: var(--danger-color);
+.options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.option-item {
+  background-color: var(--light-gray);
+  border-radius: var(--border-radius);
+  padding: 0.5rem;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.option-item:hover {
+  background-color: var(--primary-light);
+}
+
+.option-item.selected {
+  background-color: var(--primary-light);
+  border: 1px solid var(--primary-color);
+}
+
+.dropdown-select {
+  padding: 0.5rem;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--medium-gray);
+  background-color: white;
+  width: 100%;
+  font-size: 0.9rem;
+}
+
+.manual-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.select-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.similarity-badge {
+  font-size: 0.8rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background-color: var(--light-gray);
 }
 
 @media (max-width: 600px) {

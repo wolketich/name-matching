@@ -7,17 +7,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultsBody = document.getElementById('results-body');
     const system1Count = document.getElementById('system1-count');
     const system2Count = document.getElementById('system2-count');
-    const matchedCount = document.getElementById('matched-count');
-    const unmatchedCount = document.getElementById('unmatched-count');
-    const matchRate = document.getElementById('match-rate');
+    const exactCount = document.getElementById('exact-count');
+    const manualCount = document.getElementById('manual-count');
+    const progressRate = document.getElementById('progress-rate');
     const exportBtn = document.getElementById('export-btn');
     const copyBtn = document.getElementById('copy-btn');
 
     // Option elements
     const ignoreCaseCheckbox = document.getElementById('ignore-case');
     const trimWhitespaceCheckbox = document.getElementById('trim-whitespace');
-    const fuzzyMatchingCheckbox = document.getElementById('fuzzy-matching');
-    const algorithmSelect = document.getElementById('algorithm');
     
     // Clear and sample buttons
     const clearSystem1Btn = document.getElementById('clear-system1');
@@ -25,12 +23,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const sampleSystem1Btn = document.getElementById('sample-system1');
     const sampleSystem2Btn = document.getElementById('sample-system2');
 
+    // Store the complete set of matches
+    let matchResults = [];
+    let system2NamesGlobal = [];
+
     // Update counts when text changes
     system1TextArea.addEventListener('input', updateCounts);
     system2TextArea.addEventListener('input', updateCounts);
 
     // Match button click handler
-    matchBtn.addEventListener('click', performMatching);
+    matchBtn.addEventListener('click', findMatches);
     
     // Clear and sample button handlers
     clearSystem1Btn.addEventListener('click', () => {
@@ -75,9 +77,10 @@ document.addEventListener('DOMContentLoaded', () => {
             .filter(line => line.length > 0);
     }
 
-    function performMatching() {
+    function findMatches() {
         const system1Names = getNonEmptyLines(system1TextArea.value);
         const system2Names = getNonEmptyLines(system2TextArea.value);
+        system2NamesGlobal = [...system2Names]; // Store for later use
         
         if (system1Names.length === 0 || system2Names.length === 0) {
             alert('Please enter names in both text areas.');
@@ -86,72 +89,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const ignoreCase = ignoreCaseCheckbox.checked;
         const trimWhitespace = trimWhitespaceCheckbox.checked;
-        const useFuzzyMatching = fuzzyMatchingCheckbox.checked;
-        const algorithm = algorithmSelect.value;
 
-        const matches = [];
-        let matchedNamesCount = 0;
-
+        matchResults = [];
+        let exactMatchCount = 0;
+        
         // Process each name from System 1
         for (const name1 of system1Names) {
             const processedName1 = processName(name1, trimWhitespace, ignoreCase);
-            let bestMatch = null;
-            let bestScore = -1;
-            let confidenceLevel = '';
             
-            // Find the best match in System 2
+            // Try to find an exact match first
+            let exactMatch = null;
+            let exactMatchOriginal = null;
+            
             for (const name2 of system2Names) {
                 const processedName2 = processName(name2, trimWhitespace, ignoreCase);
-                let score = 0;
-                
-                // Calculate match score based on selected algorithm
-                if (algorithm === 'exact' || !useFuzzyMatching) {
-                    score = processedName1 === processedName2 ? 100 : 0;
-                } else if (algorithm === 'levenshtein') {
-                    score = 100 - Math.min(100, Math.round(levenshteinDistance(processedName1, processedName2) / Math.max(processedName1.length, processedName2.length) * 100));
-                } else if (algorithm === 'soundex') {
-                    score = soundex(processedName1) === soundex(processedName2) ? 90 : 0;
-                }
-                
-                // Keep the best match
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestMatch = name2;
+                if (processedName1 === processedName2) {
+                    exactMatch = processedName2;
+                    exactMatchOriginal = name2;
+                    break;
                 }
             }
             
-            // Determine confidence level
-            if (bestScore >= 90) {
-                confidenceLevel = 'High';
-                matchedNamesCount++;
-            } else if (bestScore >= 70) {
-                confidenceLevel = 'Medium';
-                matchedNamesCount++;
-            } else if (bestScore >= 40) {
-                confidenceLevel = 'Low';
-                matchedNamesCount++;
+            if (exactMatch) {
+                // We have an exact match
+                matchResults.push({
+                    name1: name1,
+                    name2: exactMatchOriginal,
+                    isExactMatch: true,
+                    options: [],
+                    selectedOption: exactMatchOriginal
+                });
+                exactMatchCount++;
             } else {
-                confidenceLevel = 'None';
-                bestMatch = 'No match found';
+                // No exact match, find up to 7 closest options
+                const options = findClosestMatches(processedName1, system2Names, ignoreCase, trimWhitespace, 7);
+                
+                matchResults.push({
+                    name1: name1,
+                    name2: null,
+                    isExactMatch: false,
+                    options: options,
+                    selectedOption: null
+                });
             }
-            
-            matches.push({
-                name1,
-                name2: bestMatch,
-                confidenceLevel,
-                score: bestScore
-            });
         }
         
         // Update statistics
-        matchedCount.textContent = matchedNamesCount;
-        unmatchedCount.textContent = system1Names.length - matchedNamesCount;
-        matchRate.textContent = system1Names.length > 0 
-            ? `${Math.round((matchedNamesCount / system1Names.length) * 100)}%` 
-            : '0%';
+        exactCount.textContent = exactMatchCount;
+        manualCount.textContent = system1Names.length - exactMatchCount;
+        updateProgressRate();
         
         // Display results
-        displayResults(matches);
+        displayResults();
         resultsContainer.style.display = 'block';
         
         // Scroll to results
@@ -165,104 +154,38 @@ document.addEventListener('DOMContentLoaded', () => {
         return result;
     }
 
-    function displayResults(matches) {
-        resultsBody.innerHTML = '';
+    function findClosestMatches(name, namesList, ignoreCase, trimWhitespace, maxResults) {
+        const results = [];
         
-        matches.forEach(match => {
-            const row = document.createElement('tr');
+        for (const candidate of namesList) {
+            const processedCandidate = processName(candidate, trimWhitespace, ignoreCase);
+            const similarity = calculateSimilarity(name, processedCandidate);
             
-            const name1Cell = document.createElement('td');
-            name1Cell.textContent = match.name1;
-            
-            const name2Cell = document.createElement('td');
-            name2Cell.textContent = match.name2;
-            if (match.confidenceLevel === 'None') {
-                name2Cell.classList.add('no-match');
-            }
-            
-            const confidenceCell = document.createElement('td');
-            if (match.confidenceLevel !== 'None') {
-                confidenceCell.textContent = `${match.confidenceLevel} (${match.score}%)`;
-                confidenceCell.classList.add(`match-confidence-${match.confidenceLevel.toLowerCase()}`);
-            } else {
-                confidenceCell.textContent = 'No match';
-                confidenceCell.classList.add('no-match');
-            }
-            
-            row.appendChild(name1Cell);
-            row.appendChild(name2Cell);
-            row.appendChild(confidenceCell);
-            
-            resultsBody.appendChild(row);
-        });
-    }
-
-    function exportResults() {
-        const rows = [];
-        // Add header row
-        rows.push(['System 1 Name', 'System 2 Match', 'Confidence']);
-        
-        // Add data rows
-        const tableRows = document.querySelectorAll('#results-body tr');
-        tableRows.forEach(row => {
-            const cells = row.querySelectorAll('td');
-            rows.push([
-                cells[0].textContent,
-                cells[1].textContent,
-                cells[2].textContent
-            ]);
-        });
-        
-        // Convert to CSV
-        const csvContent = rows.map(row => row.join(',')).join('\n');
-        
-        // Create download link
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', 'name_matches.csv');
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
-
-    function copyResultsToClipboard() {
-        const rows = [];
-        // Add header row
-        rows.push(['System 1 Name', 'System 2 Match', 'Confidence']);
-        
-        // Add data rows
-        const tableRows = document.querySelectorAll('#results-body tr');
-        tableRows.forEach(row => {
-            const cells = row.querySelectorAll('td');
-            rows.push([
-                cells[0].textContent,
-                cells[1].textContent,
-                cells[2].textContent
-            ]);
-        });
-        
-        // Format as tabular text
-        const tabbedContent = rows.map(row => row.join('\t')).join('\n');
-        
-        // Copy to clipboard
-        navigator.clipboard.writeText(tabbedContent)
-            .then(() => {
-                const originalText = copyBtn.innerHTML;
-                copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
-                setTimeout(() => {
-                    copyBtn.innerHTML = originalText;
-                }, 2000);
-            })
-            .catch(err => {
-                console.error('Failed to copy: ', err);
-                alert('Failed to copy to clipboard');
+            results.push({
+                name: candidate,
+                similarity: similarity
             });
+        }
+        
+        // Sort by similarity (highest first)
+        results.sort((a, b) => b.similarity - a.similarity);
+        
+        // Return the top matches
+        return results.slice(0, maxResults);
     }
 
-    // Utility functions for matching algorithms
+    function calculateSimilarity(s1, s2) {
+        // Return a similarity score between 0-100
+        // Using Levenshtein distance as a base
+        if (s1 === s2) return 100;
+        
+        const distance = levenshteinDistance(s1, s2);
+        const maxLength = Math.max(s1.length, s2.length);
+        
+        // Convert distance to similarity score
+        return Math.max(0, Math.round(100 - (distance / maxLength * 100)));
+    }
+
     function levenshteinDistance(s1, s2) {
         if (s1.length === 0) return s2.length;
         if (s2.length === 0) return s1.length;
@@ -291,38 +214,195 @@ document.addEventListener('DOMContentLoaded', () => {
         return matrix[s1.length][s2.length];
     }
 
-    function soundex(s) {
-        const a = s.toLowerCase().split('');
-        const firstLetter = a[0];
+    function displayResults() {
+        resultsBody.innerHTML = '';
         
-        // Convert letters to digits
-        const codes = {
-            b: 1, f: 1, p: 1, v: 1,
-            c: 2, g: 2, j: 2, k: 2, q: 2, s: 2, x: 2, z: 2,
-            d: 3, t: 3,
-            l: 4,
-            m: 5, n: 5,
-            r: 6
-        };
-        
-        // Replace consonants with digits
-        const digits = a.map(letter => codes[letter] || letter);
-        
-        // Replace adjacent same digits with one digit
-        let i = 1;
-        while (i < digits.length) {
-            if (digits[i] === digits[i-1]) {
-                digits.splice(i, 1);
+        matchResults.forEach((match, index) => {
+            const row = document.createElement('tr');
+            
+            const name1Cell = document.createElement('td');
+            name1Cell.textContent = match.name1;
+            
+            const name2Cell = document.createElement('td');
+            if (match.isExactMatch) {
+                name2Cell.textContent = match.name2;
+                name2Cell.classList.add('exact-match');
+            } else if (match.selectedOption) {
+                name2Cell.textContent = match.selectedOption;
             } else {
-                i++;
+                name2Cell.textContent = 'No match selected';
+                name2Cell.style.fontStyle = 'italic';
+                name2Cell.style.color = '#999';
             }
-        }
+            
+            const actionCell = document.createElement('td');
+            if (match.isExactMatch) {
+                const exactBadge = document.createElement('span');
+                exactBadge.textContent = 'Exact Match';
+                exactBadge.style.backgroundColor = '#40c05780';
+                exactBadge.style.color = '#2b7a39';
+                exactBadge.style.padding = '4px 8px';
+                exactBadge.style.borderRadius = '4px';
+                exactBadge.style.fontSize = '0.85rem';
+                actionCell.appendChild(exactBadge);
+            } else {
+                // Create select dropdown for manual matching
+                const selectGroup = document.createElement('div');
+                selectGroup.className = 'select-group';
+                
+                const select = document.createElement('select');
+                select.className = 'dropdown-select';
+                select.id = `match-select-${index}`;
+                
+                // Add default option
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '';
+                defaultOption.textContent = '-- Select a match --';
+                defaultOption.selected = !match.selectedOption;
+                select.appendChild(defaultOption);
+                
+                // Add all options from system 2
+                match.options.forEach(option => {
+                    const optionElement = document.createElement('option');
+                    optionElement.value = option.name;
+                    optionElement.textContent = `${option.name} (${option.similarity}%)`;
+                    optionElement.selected = match.selectedOption === option.name;
+                    select.appendChild(optionElement);
+                });
+                
+                // Add all other options from system 2
+                const otherOptGroup = document.createElement('optgroup');
+                otherOptGroup.label = 'Other options';
+                
+                system2NamesGlobal.forEach(name => {
+                    // Check if this name is not already in the top matches
+                    if (!match.options.some(option => option.name === name)) {
+                        const optionElement = document.createElement('option');
+                        optionElement.value = name;
+                        optionElement.textContent = name;
+                        optionElement.selected = match.selectedOption === name;
+                        otherOptGroup.appendChild(optionElement);
+                    }
+                });
+                
+                if (otherOptGroup.children.length > 0) {
+                    select.appendChild(otherOptGroup);
+                }
+                
+                // Add event listener
+                select.addEventListener('change', (e) => {
+                    match.selectedOption = e.target.value || null;
+                    name2Cell.textContent = match.selectedOption || 'No match selected';
+                    if (match.selectedOption) {
+                        name2Cell.style.fontStyle = 'normal';
+                        name2Cell.style.color = 'inherit';
+                    } else {
+                        name2Cell.style.fontStyle = 'italic';
+                        name2Cell.style.color = '#999';
+                    }
+                    updateProgressRate();
+                });
+                
+                selectGroup.appendChild(select);
+                actionCell.appendChild(selectGroup);
+                
+                if (match.options.length > 0) {
+                    const similarityInfo = document.createElement('div');
+                    similarityInfo.style.fontSize = '0.8rem';
+                    similarityInfo.style.color = '#666';
+                    similarityInfo.style.marginTop = '4px';
+                    similarityInfo.textContent = `Best match: ${match.options[0].similarity}% similar`;
+                    actionCell.appendChild(similarityInfo);
+                }
+            }
+            
+            row.appendChild(name1Cell);
+            row.appendChild(name2Cell);
+            row.appendChild(actionCell);
+            
+            resultsBody.appendChild(row);
+        });
+    }
+
+    function updateProgressRate() {
+        const totalMatches = matchResults.length;
+        const completedMatches = matchResults.filter(match => 
+            match.isExactMatch || match.selectedOption
+        ).length;
         
-        // Remove vowels and h, w, y
-        const result = digits.filter(char => typeof char === 'number');
+        const rate = totalMatches > 0 ? Math.round((completedMatches / totalMatches) * 100) : 0;
+        progressRate.textContent = `${rate}%`;
+    }
+
+    function exportResults() {
+        const rows = [];
+        // Add header row
+        rows.push(['System 1 Name', 'System 2 Match', 'Match Type']);
         
-        // Ensure we have the first letter followed by 3 digits
-        return (firstLetter + result.slice(0, 3).join('')).padEnd(4, '0');
+        // Add data rows
+        matchResults.forEach(match => {
+            const matchType = match.isExactMatch ? 'Exact' : 'Manual';
+            const matchedName = match.isExactMatch ? match.name2 : (match.selectedOption || '');
+            
+            rows.push([
+                match.name1,
+                matchedName,
+                matchType
+            ]);
+        });
+        
+        // Convert to CSV
+        const csvContent = rows.map(row => 
+            row.map(cell => 
+                typeof cell === 'string' ? `"${cell.replace(/"/g, '""')}"` : cell
+            ).join(',')
+        ).join('\n');
+        
+        // Create download link
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'name_matches.csv');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function copyResultsToClipboard() {
+        const rows = [];
+        // Add header row
+        rows.push(['System 1 Name', 'System 2 Match', 'Match Type']);
+        
+        // Add data rows
+        matchResults.forEach(match => {
+            const matchType = match.isExactMatch ? 'Exact' : 'Manual';
+            const matchedName = match.isExactMatch ? match.name2 : (match.selectedOption || '');
+            
+            rows.push([
+                match.name1,
+                matchedName,
+                matchType
+            ]);
+        });
+        
+        // Format as tabular text
+        const tabbedContent = rows.map(row => row.join('\t')).join('\n');
+        
+        // Copy to clipboard
+        navigator.clipboard.writeText(tabbedContent)
+            .then(() => {
+                const originalText = copyBtn.innerHTML;
+                copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalText;
+                }, 2000);
+            })
+            .catch(err => {
+                console.error('Failed to copy: ', err);
+                alert('Failed to copy to clipboard');
+            });
     }
 
     function getSampleSystem1Data() {
