@@ -319,6 +319,21 @@ textarea:focus {
   font-weight: 700;
 }
 
+/* Style for no match */
+.no-match-text {
+  color: var(--danger-color);
+  font-weight: 700;
+}
+
+/* Special dropdown styling for the no-match option */
+.no-match-option {
+  color: var(--danger-color);
+  font-weight: bold;
+  border-bottom: 1px solid #f1f1f1;
+  padding-bottom: 5px;
+  margin-bottom: 5px;
+}
+
 footer {
   padding: 1.5rem;
   text-align: center;
@@ -420,6 +435,12 @@ footer {
 .status-badge.unmatched {
   background-color: rgba(250, 82, 82, 0.2);
   color: var(--danger-color);
+}
+
+.status-badge.no-match {
+  background-color: rgba(250, 82, 82, 0.2);
+  color: var(--danger-color);
+  font-weight: 700;
 }
 
 /* Fix for the select dropdown display */

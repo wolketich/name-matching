@@ -30,6 +30,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let system2NamesGlobal = [];
     let usedSystem2Names = new Set();
 
+    // Special constant for "No Match Found"
+    const NO_MATCH_FOUND = "NO_MATCH_FOUND"; // Special identifier
+
     // Initialize tooltips
     document.querySelectorAll('[title]').forEach(el => {
         el.addEventListener('mouseover', e => {
@@ -371,11 +374,21 @@ document.addEventListener('DOMContentLoaded', () => {
             span.textContent = 'Exact Match';
             span.classList.add('exact');
         } else if (match.locked) {
-            span.textContent = 'Locked';
-            span.classList.add('locked');
+            if (match.selectedOption === NO_MATCH_FOUND) {
+                span.textContent = 'No Match';
+                span.classList.add('no-match');
+            } else {
+                span.textContent = 'Locked';
+                span.classList.add('locked');
+            }
         } else if (match.selectedOption) {
-            span.textContent = 'Selected (Pending)';
-            span.classList.add('pending');
+            if (match.selectedOption === NO_MATCH_FOUND) {
+                span.textContent = 'No Match (Pending)';
+                span.classList.add('no-match');
+            } else {
+                span.textContent = 'Selected (Pending)';
+                span.classList.add('pending');
+            }
         } else {
             span.textContent = 'Unmatched';
             span.classList.add('unmatched');
@@ -398,11 +411,18 @@ document.addEventListener('DOMContentLoaded', () => {
             // System 2 Match
             const name2Cell = document.createElement('td');
             if (match.isExactMatch || match.selectedOption) {
-                name2Cell.textContent = match.isExactMatch ? match.name2 : match.selectedOption;
-                if (match.isExactMatch) {
-                    name2Cell.classList.add('exact-match');
-                } else if (match.locked) {
-                    name2Cell.classList.add('locked-match'); // Class for locked matches
+                if (match.selectedOption === NO_MATCH_FOUND) {
+                    // No match found option was selected
+                    name2Cell.textContent = 'No Match Found';
+                    name2Cell.classList.add('no-match-text');
+                } else {
+                    // Normal match
+                    name2Cell.textContent = match.isExactMatch ? match.name2 : match.selectedOption;
+                    if (match.isExactMatch) {
+                        name2Cell.classList.add('exact-match');
+                    } else if (match.locked) {
+                        name2Cell.classList.add('locked-match');
+                    }
                 }
             } else {
                 name2Cell.textContent = 'No match selected';
@@ -462,8 +482,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 actionArea.appendChild(actionButtons);
                 actionCell.appendChild(actionArea);
                 
-                // Add similarity info if there are options
-                if (match.options.length > 0 && !match.locked) {
+                // Add similarity info if there are options and not locked
+                if (match.options.length > 0 && !match.locked && match.selectedOption !== NO_MATCH_FOUND) {
                     const similarityInfo = document.createElement('div');
                     similarityInfo.style.fontSize = '0.8rem';
                     similarityInfo.style.color = '#666';
@@ -484,76 +504,77 @@ document.addEventListener('DOMContentLoaded', () => {
         select.id = `match-select-${index}`;
         select.disabled = match.locked;
         
-        // Add default option
+        // Clear the select and add default option
+        select.innerHTML = '';
+        
         const defaultOption = document.createElement('option');
         defaultOption.value = '';
         defaultOption.textContent = '-- Select a match --';
         defaultOption.selected = !match.selectedOption;
         select.appendChild(defaultOption);
         
-        // Function to update available options based on what's already used
-        const updateOptions = () => {
-            // Clear current options (except default)
-            while (select.options.length > 1) {
-                select.remove(1);
-            }
-            
-            // Add top matches
-            const availableOptions = match.options.filter(option => 
-                !usedSystem2Names.has(option.name) || option.name === match.selectedOption
-            );
-            
-            if (availableOptions.length > 0) {
-                const matchesOptGroup = document.createElement('optgroup');
-                matchesOptGroup.label = 'Best Matches';
-                
-                availableOptions.forEach(option => {
-                    const optionElement = document.createElement('option');
-                    optionElement.value = option.name;
-                    optionElement.textContent = `${option.name} (${option.similarity}%)`;
-                    optionElement.selected = match.selectedOption === option.name;
-                    matchesOptGroup.appendChild(optionElement);
-                });
-                
-                select.appendChild(matchesOptGroup);
-            }
-            
-            // Add other available options
-            const otherAvailableNames = system2NamesGlobal.filter(name => 
-                !usedSystem2Names.has(name) || name === match.selectedOption
-            );
-            
-            // Filter out names already in the top matches
-            const otherNames = otherAvailableNames.filter(name => 
-                !match.options.some(option => option.name === name)
-            );
-            
-            if (otherNames.length > 0) {
-                const otherOptGroup = document.createElement('optgroup');
-                otherOptGroup.label = 'Other options';
-                
-                otherNames.forEach(name => {
-                    const optionElement = document.createElement('option');
-                    optionElement.value = name;
-                    optionElement.textContent = name;
-                    optionElement.selected = match.selectedOption === name;
-                    otherOptGroup.appendChild(optionElement);
-                });
-                
-                select.appendChild(otherOptGroup);
-            }
-        };
+        // Add "No Match Found" option
+        const noMatchOption = document.createElement('option');
+        noMatchOption.value = NO_MATCH_FOUND;
+        noMatchOption.textContent = 'No Match Found';
+        noMatchOption.className = 'no-match-option';
+        noMatchOption.selected = match.selectedOption === NO_MATCH_FOUND;
+        noMatchOption.style.color = 'var(--danger-color)';
+        noMatchOption.style.fontWeight = 'bold';
+        select.appendChild(noMatchOption);
         
-        // Initial update of options
-        updateOptions();
+        // Add top matches
+        const availableOptions = match.options.filter(option => 
+            !usedSystem2Names.has(option.name) || option.name === match.selectedOption
+        );
+        
+        if (availableOptions.length > 0) {
+            const matchesOptGroup = document.createElement('optgroup');
+            matchesOptGroup.label = 'Best Matches';
+            
+            availableOptions.forEach(option => {
+                const optionElement = document.createElement('option');
+                optionElement.value = option.name;
+                optionElement.textContent = `${option.name} (${option.similarity}%)`;
+                optionElement.selected = match.selectedOption === option.name;
+                matchesOptGroup.appendChild(optionElement);
+            });
+            
+            select.appendChild(matchesOptGroup);
+        }
+        
+        // Add other available options
+        const otherAvailableNames = system2NamesGlobal.filter(name => 
+            !usedSystem2Names.has(name) || name === match.selectedOption
+        );
+        
+        // Filter out names already in the top matches
+        const otherNames = otherAvailableNames.filter(name => 
+            !match.options.some(option => option.name === name)
+        );
+        
+        if (otherNames.length > 0) {
+            const otherOptGroup = document.createElement('optgroup');
+            otherOptGroup.label = 'Other options';
+            
+            otherNames.forEach(name => {
+                const optionElement = document.createElement('option');
+                optionElement.value = name;
+                optionElement.textContent = name;
+                optionElement.selected = match.selectedOption === name;
+                otherOptGroup.appendChild(optionElement);
+            });
+            
+            select.appendChild(otherOptGroup);
+        }
         
         // Add event listener for select changes
         select.addEventListener('change', (e) => {
             const newValue = e.target.value;
             const oldValue = match.selectedOption;
             
-            // If there was a previous selection, make it available again
-            if (oldValue && match.locked) {
+            // If there was a previous selection and it wasn't "No Match Found", make it available again
+            if (oldValue && oldValue !== NO_MATCH_FOUND && match.locked) {
                 usedSystem2Names.delete(oldValue);
             }
             
@@ -562,16 +583,26 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Update UI
             if (match.selectedOption) {
-                name2Cell.textContent = match.selectedOption;
-                name2Cell.style.fontStyle = 'normal';
-                name2Cell.style.color = 'inherit';
+                if (match.selectedOption === NO_MATCH_FOUND) {
+                    // No match found option was selected
+                    name2Cell.textContent = 'No Match Found';
+                    name2Cell.className = 'no-match-text'; // Apply red style
+                    name2Cell.style.fontStyle = 'normal';
+                } else {
+                    // Normal match
+                    name2Cell.textContent = match.selectedOption;
+                    name2Cell.className = ''; // Reset class
+                    name2Cell.style.fontStyle = 'normal';
+                    name2Cell.style.color = 'inherit';
+                }
                 
-                // Enable lock button if on a select element's parent's siblings
+                // Enable lock button
                 const lockBtn = select.closest('.manual-match-area')
                     .querySelector('.action-buttons .btn-info');
                 if (lockBtn) lockBtn.disabled = false;
             } else {
                 name2Cell.textContent = 'No match selected';
+                name2Cell.className = ''; // Reset class
                 name2Cell.style.fontStyle = 'italic';
                 name2Cell.style.color = '#999';
                 
@@ -599,8 +630,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update match data
         match.locked = true;
         
-        // Add to used names
-        if (match.selectedOption) {
+        // Add to used names (only if it's a real match, not "No Match Found")
+        if (match.selectedOption && match.selectedOption !== NO_MATCH_FOUND) {
             usedSystem2Names.add(match.selectedOption);
         }
         
@@ -610,7 +641,9 @@ document.addEventListener('DOMContentLoaded', () => {
         cancelBtn.disabled = false;
         
         // Update cell appearance
-        name2Cell.classList.add('locked-match');
+        if (match.selectedOption !== NO_MATCH_FOUND) {
+            name2Cell.classList.add('locked-match');
+        }
         
         // Update status
         statusCell.innerHTML = '';
@@ -624,8 +657,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function cancelMatch(match, index, select, lockBtn, cancelBtn, name2Cell, statusCell) {
-        // Remove from used names
-        if (match.selectedOption) {
+        // Remove from used names (only if it's a real match, not "No Match Found")
+        if (match.selectedOption && match.selectedOption !== NO_MATCH_FOUND) {
             usedSystem2Names.delete(match.selectedOption);
         }
         
@@ -637,7 +670,7 @@ document.addEventListener('DOMContentLoaded', () => {
         lockBtn.disabled = !match.selectedOption;
         cancelBtn.disabled = true;
         
-        // Update cell appearance
+        // Update cell appearance - remove locked style
         name2Cell.classList.remove('locked-match');
         
         // Update status
@@ -660,10 +693,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Save current value
                     const currentValue = select.value;
                     
-                    // Clear options but keep the first default option
-                    while (select.options.length > 1) {
-                        select.remove(1);
-                    }
+                    // Clear all options and recreate
+                    select.innerHTML = '';
+                    
+                    // Add default option
+                    const defaultOption = document.createElement('option');
+                    defaultOption.value = '';
+                    defaultOption.textContent = '-- Select a match --';
+                    defaultOption.selected = !currentValue;
+                    select.appendChild(defaultOption);
+                    
+                    // Add "No Match Found" option
+                    const noMatchOption = document.createElement('option');
+                    noMatchOption.value = NO_MATCH_FOUND;
+                    noMatchOption.textContent = 'No Match Found';
+                    noMatchOption.className = 'no-match-option';
+                    noMatchOption.selected = currentValue === NO_MATCH_FOUND;
+                    noMatchOption.style.color = 'var(--danger-color)';
+                    noMatchOption.style.fontWeight = 'bold';
+                    select.appendChild(noMatchOption);
                     
                     // Create optgroups only once
                     const bestMatchesGroup = document.createElement('optgroup');
@@ -721,8 +769,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     
                     // If current value is not in the list anymore, reset selection
-                    if (select.selectedIndex === -1) {
+                    const hasValidSelection = Array.from(select.options).some(option => 
+                        option.value === currentValue && option.value !== ''
+                    );
+                    
+                    if (!hasValidSelection && currentValue && currentValue !== NO_MATCH_FOUND) {
                         select.value = '';
+                        
+                        // Also update the match object
+                        match.selectedOption = null;
+                        
+                        // Update the UI to show "No match selected"
+                        const name2Cell = select.closest('tr').querySelector('td:nth-child(2)');
+                        name2Cell.textContent = 'No match selected';
+                        name2Cell.className = ''; // Reset class
+                        name2Cell.style.fontStyle = 'italic';
+                        name2Cell.style.color = '#999';
+                        
+                        // Update the status badge
+                        const statusCell = select.closest('tr').querySelector('td:nth-child(3)');
+                        statusCell.innerHTML = '';
+                        statusCell.appendChild(getStatusBadge(match));
+                        
+                        // Disable the lock button
+                        const lockBtn = select.closest('.manual-match-area')
+                            .querySelector('.action-buttons .btn-info');
+                        if (lockBtn) lockBtn.disabled = true;
                     }
                 }
             }
@@ -736,11 +808,18 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Add data rows
         matchResults.forEach(match => {
-            const matchType = match.isExactMatch ? 'Exact' : 'Manual';
-            const matchedName = match.isExactMatch ? match.name2 : (match.selectedOption || '');
+            let matchType = match.isExactMatch ? 'Exact' : 'Manual';
+            let matchedName = match.isExactMatch ? match.name2 : (match.selectedOption || '');
+            
+            // Special handling for "No Match Found"
+            if (match.selectedOption === NO_MATCH_FOUND) {
+                matchedName = 'No Match Found';
+                matchType = 'No Match';
+            }
+            
             const status = match.isExactMatch ? 'Locked (Exact)' : 
-                          (match.locked ? 'Locked (Manual)' : 
-                          (match.selectedOption ? 'Selected (Pending)' : 'Unmatched'));
+                           (match.locked ? (match.selectedOption === NO_MATCH_FOUND ? 'No Match (Locked)' : 'Locked (Manual)') : 
+                           (match.selectedOption ? (match.selectedOption === NO_MATCH_FOUND ? 'No Match (Pending)' : 'Selected (Pending)') : 'Unmatched'));
             
             rows.push([
                 match.name1,
@@ -781,11 +860,18 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Add data rows
         matchResults.forEach(match => {
-            const matchType = match.isExactMatch ? 'Exact' : 'Manual';
-            const matchedName = match.isExactMatch ? match.name2 : (match.selectedOption || '');
+            let matchType = match.isExactMatch ? 'Exact' : 'Manual';
+            let matchedName = match.isExactMatch ? match.name2 : (match.selectedOption || '');
+            
+            // Special handling for "No Match Found"
+            if (match.selectedOption === NO_MATCH_FOUND) {
+                matchedName = 'No Match Found';
+                matchType = 'No Match';
+            }
+            
             const status = match.isExactMatch ? 'Locked (Exact)' : 
-                          (match.locked ? 'Locked (Manual)' : 
-                          (match.selectedOption ? 'Selected (Pending)' : 'Unmatched'));
+                           (match.locked ? (match.selectedOption === NO_MATCH_FOUND ? 'No Match (Locked)' : 'Locked (Manual)') : 
+                           (match.selectedOption ? (match.selectedOption === NO_MATCH_FOUND ? 'No Match (Pending)' : 'Selected (Pending)') : 'Unmatched'));
             
             rows.push([
                 match.name1,
