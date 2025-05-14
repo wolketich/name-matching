@@ -12,6 +12,8 @@
         <header>
             <h1>Name Matching Tool</h1>
             <p>Match names between two systems with manual selection</p>
+            <div class="timestamp">Current time: 2025-05-14 10:27:58 UTC</div>
+            <div class="user-info">User: wolketichand</div>
         </header>
 
         <div class="input-container">
@@ -60,6 +62,11 @@
                         <input type="checkbox" id="trim-whitespace" checked>
                         <label for="trim-whitespace">Trim whitespace</label>
                     </div>
+                    <div class="option">
+                        <input type="checkbox" id="irish-names" checked>
+                        <label for="irish-names">Irish name variations</label>
+                        <i class="fas fa-info-circle irish-tooltip" title="Handles accents, prefixes (O', Mac), dashes, etc."></i>
+                    </div>
                 </div>
             </div>
             <button class="btn btn-primary" id="match-btn">
@@ -75,8 +82,12 @@
                     <span class="stat-value" id="exact-count">0</span>
                 </div>
                 <div class="stat-box">
-                    <span class="stat-label">Require Manual</span>
+                    <span class="stat-label">Manual Matches</span>
                     <span class="stat-value" id="manual-count">0</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Locked Matches</span>
+                    <span class="stat-value" id="locked-count">0</span>
                 </div>
                 <div class="stat-box">
                     <span class="stat-label">Progress</span>
@@ -97,6 +108,7 @@
                         <tr>
                             <th>System 1 Name</th>
                             <th>System 2 Match</th>
+                            <th>Status</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -108,7 +120,7 @@
         </div>
         
         <footer>
-            <p>© 2025 Name Matching Tool | User: wolketich</p>
+            <p>© 2025 Name Matching Tool | 1:1 Matching System with Irish Name Support</p>
         </footer>
     </div>
     <script src="script.js"></script>

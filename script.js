@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const system2Count = document.getElementById('system2-count');
     const exactCount = document.getElementById('exact-count');
     const manualCount = document.getElementById('manual-count');
+    const lockedCount = document.getElementById('locked-count');
     const progressRate = document.getElementById('progress-rate');
     const exportBtn = document.getElementById('export-btn');
     const copyBtn = document.getElementById('copy-btn');
@@ -16,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Option elements
     const ignoreCaseCheckbox = document.getElementById('ignore-case');
     const trimWhitespaceCheckbox = document.getElementById('trim-whitespace');
+    const irishNamesCheckbox = document.getElementById('irish-names');
     
     // Clear and sample buttons
     const clearSystem1Btn = document.getElementById('clear-system1');
@@ -23,9 +25,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const sampleSystem1Btn = document.getElementById('sample-system1');
     const sampleSystem2Btn = document.getElementById('sample-system2');
 
-    // Store the complete set of matches
+    // Store the complete set of matches and keep track of used names
     let matchResults = [];
     let system2NamesGlobal = [];
+    let usedSystem2Names = new Set();
+
+    // Initialize tooltips
+    document.querySelectorAll('[title]').forEach(el => {
+        el.addEventListener('mouseover', e => {
+            const tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            tooltip.textContent = e.target.getAttribute('title');
+            tooltip.style.position = 'absolute';
+            tooltip.style.backgroundColor = '#333';
+            tooltip.style.color = '#fff';
+            tooltip.style.padding = '5px 10px';
+            tooltip.style.borderRadius = '4px';
+            tooltip.style.fontSize = '0.8rem';
+            tooltip.style.zIndex = '1000';
+            tooltip.style.maxWidth = '250px';
+            
+            document.body.appendChild(tooltip);
+            
+            const rect = e.target.getBoundingClientRect();
+            tooltip.style.top = `${rect.bottom + window.scrollY + 5}px`;
+            tooltip.style.left = `${rect.left + window.scrollX}px`;
+            
+            e.target.addEventListener('mouseout', () => {
+                document.body.removeChild(tooltip);
+            }, { once: true });
+        });
+    });
 
     // Update counts when text changes
     system1TextArea.addEventListener('input', updateCounts);
@@ -89,55 +119,78 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const ignoreCase = ignoreCaseCheckbox.checked;
         const trimWhitespace = trimWhitespaceCheckbox.checked;
+        const handleIrishNames = irishNamesCheckbox.checked;
 
         matchResults = [];
+        usedSystem2Names = new Set(); // Reset used names
         let exactMatchCount = 0;
         
-        // Process each name from System 1
-        for (const name1 of system1Names) {
-            const processedName1 = processName(name1, trimWhitespace, ignoreCase);
+        // Find exact matches first (these are auto-locked)
+        const exactMatchMap = new Map();
+        
+        // Process all names according to selected options
+        const processedSystem1Names = system1Names.map(name => 
+            processName(name, trimWhitespace, ignoreCase, handleIrishNames));
+        
+        const processedSystem2Names = system2Names.map(name => 
+            processName(name, trimWhitespace, ignoreCase, handleIrishNames));
+        
+        // First pass: find and mark exact matches
+        processedSystem1Names.forEach((processedName, index) => {
+            const originalName = system1Names[index];
             
-            // Try to find an exact match first
-            let exactMatch = null;
-            let exactMatchOriginal = null;
-            
-            for (const name2 of system2Names) {
-                const processedName2 = processName(name2, trimWhitespace, ignoreCase);
-                if (processedName1 === processedName2) {
-                    exactMatch = processedName2;
-                    exactMatchOriginal = name2;
-                    break;
-                }
+            const exactMatchIndex = processedSystem2Names.findIndex(name => 
+                name === processedName);
+                
+            if (exactMatchIndex !== -1) {
+                const matchedName = system2Names[exactMatchIndex];
+                exactMatchMap.set(originalName, matchedName);
+                usedSystem2Names.add(matchedName);
+                exactMatchCount++;
             }
-            
-            if (exactMatch) {
-                // We have an exact match
+        });
+        
+        // Second pass: create match objects for all names
+        for (const name1 of system1Names) {
+            if (exactMatchMap.has(name1)) {
+                // This is an exact match
+                const name2 = exactMatchMap.get(name1);
                 matchResults.push({
                     name1: name1,
-                    name2: exactMatchOriginal,
+                    name2: name2,
                     isExactMatch: true,
                     options: [],
-                    selectedOption: exactMatchOriginal
+                    selectedOption: name2,
+                    locked: true
                 });
-                exactMatchCount++;
             } else {
-                // No exact match, find up to 7 closest options
-                const options = findClosestMatches(processedName1, system2Names, ignoreCase, trimWhitespace, 7);
+                // No exact match, find options (excluding already matched names)
+                const availableSystem2Names = system2Names.filter(name => 
+                    !usedSystem2Names.has(name));
+                
+                const processedName1 = processName(name1, trimWhitespace, ignoreCase, handleIrishNames);
+                const options = findClosestMatches(
+                    processedName1, 
+                    availableSystem2Names, 
+                    ignoreCase, 
+                    trimWhitespace,
+                    handleIrishNames,
+                    7
+                );
                 
                 matchResults.push({
                     name1: name1,
                     name2: null,
                     isExactMatch: false,
                     options: options,
-                    selectedOption: null
+                    selectedOption: null,
+                    locked: false
                 });
             }
         }
         
         // Update statistics
-        exactCount.textContent = exactMatchCount;
-        manualCount.textContent = system1Names.length - exactMatchCount;
-        updateProgressRate();
+        updateStatistics();
         
         // Display results
         displayResults();
@@ -147,23 +200,59 @@ document.addEventListener('DOMContentLoaded', () => {
         resultsContainer.scrollIntoView({ behavior: 'smooth' });
     }
 
-    function processName(name, trim, ignoreCase) {
+    function processName(name, trim, ignoreCase, handleIrishNames) {
         let result = name;
         if (trim) result = result.trim();
         if (ignoreCase) result = result.toLowerCase();
+        
+        // Apply Irish name normalization if enabled
+        if (handleIrishNames) {
+            result = normalizeIrishName(result);
+        }
+        
         return result;
     }
+    
+    function normalizeIrishName(name) {
+        // Handle Irish name variations when comparing
+        let normalizedName = name;
+        
+        // Remove accents/fada
+        normalizedName = normalizedName.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        
+        // Standardize O' prefix variations
+        normalizedName = normalizedName.replace(/^o['']?\s*/i, 'o');
+        
+        // Standardize Mac/Mc prefix variations
+        normalizedName = normalizedName.replace(/^mac\s*/i, 'mac');
+        normalizedName = normalizedName.replace(/^mc\s*/i, 'mac');
+        
+        // Standardize spaces, hyphens in names
+        normalizedName = normalizedName.replace(/[-\s]+/g, ' ');
+        
+        // Remove apostrophes in names like D'Arcy
+        normalizedName = normalizedName.replace(/[''](?=\w)/g, '');
+        
+        return normalizedName;
+    }
 
-    function findClosestMatches(name, namesList, ignoreCase, trimWhitespace, maxResults) {
+    function findClosestMatches(name, namesList, ignoreCase, trimWhitespace, handleIrishNames, maxResults) {
         const results = [];
         
         for (const candidate of namesList) {
-            const processedCandidate = processName(candidate, trimWhitespace, ignoreCase);
+            const processedCandidate = processName(candidate, trimWhitespace, ignoreCase, handleIrishNames);
             const similarity = calculateSimilarity(name, processedCandidate);
+            
+            // Check for Irish name specific similarities
+            let additionalScore = 0;
+            if (handleIrishNames) {
+                // Check for common Irish name variations
+                additionalScore = calculateIrishNameSimilarity(name, processedCandidate);
+            }
             
             results.push({
                 name: candidate,
-                similarity: similarity
+                similarity: Math.min(100, similarity + additionalScore) // Cap at 100%
             });
         }
         
@@ -172,6 +261,43 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Return the top matches
         return results.slice(0, maxResults);
+    }
+    
+    function calculateIrishNameSimilarity(name1, name2) {
+        // This function adds bonus points for Irish name variations
+        let bonus = 0;
+        
+        // Lower case for comparison
+        const n1 = name1.toLowerCase();
+        const n2 = name2.toLowerCase();
+        
+        // Check for O' prefix variations
+        if ((n1.startsWith('o') && n2.startsWith('o')) ||
+            (n1.startsWith('o\'') && n2.startsWith('o')) ||
+            (n1.startsWith('o') && n2.startsWith('o\''))) {
+            bonus += 15;
+        }
+        
+        // Check for Mac/Mc variations
+        if ((n1.startsWith('mac') && n2.startsWith('mc')) ||
+            (n1.startsWith('mc') && n2.startsWith('mac'))) {
+            bonus += 15;
+        }
+        
+        // Check for names that differ by just an accent mark
+        // For this we would need to compare the original name, not the normalized one
+        // But we can check if they match after accent removal
+        if (name1.normalize('NFD').replace(/[\u0300-\u036f]/g, '') === 
+            name2.normalize('NFD').replace(/[\u0300-\u036f]/g, '')) {
+            bonus += 20;
+        }
+        
+        // Hyphen vs space
+        if (n1.replace('-', ' ') === n2 || n2.replace('-', ' ') === n1) {
+            bonus += 20;
+        }
+        
+        return bonus;
     }
 
     function calculateSimilarity(s1, s2) {
@@ -214,99 +340,130 @@ document.addEventListener('DOMContentLoaded', () => {
         return matrix[s1.length][s2.length];
     }
 
+    function updateStatistics() {
+        const exactMatches = matchResults.filter(match => match.isExactMatch).length;
+        const manualMatches = matchResults.filter(match => !match.isExactMatch).length;
+        const lockedManualMatches = matchResults.filter(match => 
+            !match.isExactMatch && match.locked).length;
+        
+        exactCount.textContent = exactMatches;
+        manualCount.textContent = manualMatches;
+        lockedCount.textContent = exactMatches + lockedManualMatches;
+        
+        updateProgressRate();
+    }
+
+    function updateProgressRate() {
+        const totalMatches = matchResults.length;
+        const completedMatches = matchResults.filter(match => 
+            match.isExactMatch || match.locked
+        ).length;
+        
+        const rate = totalMatches > 0 ? Math.round((completedMatches / totalMatches) * 100) : 0;
+        progressRate.textContent = `${rate}%`;
+    }
+
+    function getStatusBadge(match) {
+        const span = document.createElement('span');
+        span.className = 'status-badge';
+        
+        if (match.isExactMatch) {
+            span.textContent = 'Exact Match';
+            span.classList.add('exact');
+        } else if (match.locked) {
+            span.textContent = 'Locked';
+            span.classList.add('locked');
+        } else if (match.selectedOption) {
+            span.textContent = 'Selected (Pending)';
+            span.classList.add('pending');
+        } else {
+            span.textContent = 'Unmatched';
+            span.classList.add('unmatched');
+        }
+        
+        return span;
+    }
+
     function displayResults() {
         resultsBody.innerHTML = '';
         
         matchResults.forEach((match, index) => {
             const row = document.createElement('tr');
             
+            // System 1 Name
             const name1Cell = document.createElement('td');
             name1Cell.textContent = match.name1;
+            row.appendChild(name1Cell);
             
+            // System 2 Match
             const name2Cell = document.createElement('td');
-            if (match.isExactMatch) {
-                name2Cell.textContent = match.name2;
-                name2Cell.classList.add('exact-match');
-            } else if (match.selectedOption) {
-                name2Cell.textContent = match.selectedOption;
+            if (match.isExactMatch || match.selectedOption) {
+                name2Cell.textContent = match.isExactMatch ? match.name2 : match.selectedOption;
+                if (match.isExactMatch) {
+                    name2Cell.classList.add('exact-match');
+                } else if (match.locked) {
+                    name2Cell.classList.add('locked-match'); // Class for locked matches
+                }
             } else {
                 name2Cell.textContent = 'No match selected';
                 name2Cell.style.fontStyle = 'italic';
                 name2Cell.style.color = '#999';
             }
+            row.appendChild(name2Cell);
             
+            // Status
+            const statusCell = document.createElement('td');
+            statusCell.appendChild(getStatusBadge(match));
+            row.appendChild(statusCell);
+            
+            // Action Cell
             const actionCell = document.createElement('td');
+            
             if (match.isExactMatch) {
-                const exactBadge = document.createElement('span');
-                exactBadge.textContent = 'Exact Match';
-                exactBadge.style.backgroundColor = '#40c05780';
-                exactBadge.style.color = '#2b7a39';
-                exactBadge.style.padding = '4px 8px';
-                exactBadge.style.borderRadius = '4px';
-                exactBadge.style.fontSize = '0.85rem';
-                actionCell.appendChild(exactBadge);
+                // No action needed for exact matches - they're automatically locked
+                actionCell.textContent = 'Automatic';
             } else {
-                // Create select dropdown for manual matching
+                // Create action area for manual matching
+                const actionArea = document.createElement('div');
+                actionArea.className = 'manual-match-area';
+                
+                // Create select dropdown
                 const selectGroup = document.createElement('div');
                 selectGroup.className = 'select-group';
                 
-                const select = document.createElement('select');
-                select.className = 'dropdown-select';
-                select.id = `match-select-${index}`;
-                
-                // Add default option
-                const defaultOption = document.createElement('option');
-                defaultOption.value = '';
-                defaultOption.textContent = '-- Select a match --';
-                defaultOption.selected = !match.selectedOption;
-                select.appendChild(defaultOption);
-                
-                // Add all options from system 2
-                match.options.forEach(option => {
-                    const optionElement = document.createElement('option');
-                    optionElement.value = option.name;
-                    optionElement.textContent = `${option.name} (${option.similarity}%)`;
-                    optionElement.selected = match.selectedOption === option.name;
-                    select.appendChild(optionElement);
-                });
-                
-                // Add all other options from system 2
-                const otherOptGroup = document.createElement('optgroup');
-                otherOptGroup.label = 'Other options';
-                
-                system2NamesGlobal.forEach(name => {
-                    // Check if this name is not already in the top matches
-                    if (!match.options.some(option => option.name === name)) {
-                        const optionElement = document.createElement('option');
-                        optionElement.value = name;
-                        optionElement.textContent = name;
-                        optionElement.selected = match.selectedOption === name;
-                        otherOptGroup.appendChild(optionElement);
-                    }
-                });
-                
-                if (otherOptGroup.children.length > 0) {
-                    select.appendChild(otherOptGroup);
-                }
-                
-                // Add event listener
-                select.addEventListener('change', (e) => {
-                    match.selectedOption = e.target.value || null;
-                    name2Cell.textContent = match.selectedOption || 'No match selected';
-                    if (match.selectedOption) {
-                        name2Cell.style.fontStyle = 'normal';
-                        name2Cell.style.color = 'inherit';
-                    } else {
-                        name2Cell.style.fontStyle = 'italic';
-                        name2Cell.style.color = '#999';
-                    }
-                    updateProgressRate();
-                });
-                
+                const select = createSelectDropdown(match, index, name2Cell, statusCell);
                 selectGroup.appendChild(select);
-                actionCell.appendChild(selectGroup);
+                actionArea.appendChild(selectGroup);
                 
-                if (match.options.length > 0) {
+                // Create action buttons
+                const actionButtons = document.createElement('div');
+                actionButtons.className = 'action-buttons';
+                
+                // Lock button
+                const lockBtn = document.createElement('button');
+                lockBtn.className = 'btn btn-info btn-sm';
+                lockBtn.innerHTML = '<i class="fas fa-lock"></i> Lock';
+                lockBtn.disabled = !match.selectedOption || match.locked;
+                lockBtn.addEventListener('click', () => {
+                    lockMatch(match, index, select, lockBtn, cancelBtn, name2Cell, statusCell);
+                });
+                actionButtons.appendChild(lockBtn);
+                
+                // Cancel button
+                const cancelBtn = document.createElement('button');
+                cancelBtn.className = 'btn btn-danger btn-sm';
+                cancelBtn.innerHTML = '<i class="fas fa-times"></i> Cancel';
+                cancelBtn.disabled = !match.selectedOption || !match.locked;
+                cancelBtn.addEventListener('click', () => {
+                    cancelMatch(match, index, select, lockBtn, cancelBtn, name2Cell, statusCell);
+                });
+                actionButtons.appendChild(cancelBtn);
+                
+                actionArea.appendChild(actionButtons);
+                actionCell.appendChild(actionArea);
+                
+                // Add similarity info if there are options
+                if (match.options.length > 0 && !match.locked) {
                     const similarityInfo = document.createElement('div');
                     similarityInfo.style.fontSize = '0.8rem';
                     similarityInfo.style.color = '#666';
@@ -316,38 +473,280 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             
-            row.appendChild(name1Cell);
-            row.appendChild(name2Cell);
             row.appendChild(actionCell);
-            
             resultsBody.appendChild(row);
         });
     }
 
-    function updateProgressRate() {
-        const totalMatches = matchResults.length;
-        const completedMatches = matchResults.filter(match => 
-            match.isExactMatch || match.selectedOption
-        ).length;
+    function createSelectDropdown(match, index, name2Cell, statusCell) {
+        const select = document.createElement('select');
+        select.className = 'dropdown-select';
+        select.id = `match-select-${index}`;
+        select.disabled = match.locked;
         
-        const rate = totalMatches > 0 ? Math.round((completedMatches / totalMatches) * 100) : 0;
-        progressRate.textContent = `${rate}%`;
+        // Add default option
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '-- Select a match --';
+        defaultOption.selected = !match.selectedOption;
+        select.appendChild(defaultOption);
+        
+        // Function to update available options based on what's already used
+        const updateOptions = () => {
+            // Clear current options (except default)
+            while (select.options.length > 1) {
+                select.remove(1);
+            }
+            
+            // Add top matches
+            const availableOptions = match.options.filter(option => 
+                !usedSystem2Names.has(option.name) || option.name === match.selectedOption
+            );
+            
+            if (availableOptions.length > 0) {
+                const matchesOptGroup = document.createElement('optgroup');
+                matchesOptGroup.label = 'Best Matches';
+                
+                availableOptions.forEach(option => {
+                    const optionElement = document.createElement('option');
+                    optionElement.value = option.name;
+                    optionElement.textContent = `${option.name} (${option.similarity}%)`;
+                    optionElement.selected = match.selectedOption === option.name;
+                    matchesOptGroup.appendChild(optionElement);
+                });
+                
+                select.appendChild(matchesOptGroup);
+            }
+            
+            // Add other available options
+            const otherAvailableNames = system2NamesGlobal.filter(name => 
+                !usedSystem2Names.has(name) || name === match.selectedOption
+            );
+            
+            // Filter out names already in the top matches
+            const otherNames = otherAvailableNames.filter(name => 
+                !match.options.some(option => option.name === name)
+            );
+            
+            if (otherNames.length > 0) {
+                const otherOptGroup = document.createElement('optgroup');
+                otherOptGroup.label = 'Other options';
+                
+                otherNames.forEach(name => {
+                    const optionElement = document.createElement('option');
+                    optionElement.value = name;
+                    optionElement.textContent = name;
+                    optionElement.selected = match.selectedOption === name;
+                    otherOptGroup.appendChild(optionElement);
+                });
+                
+                select.appendChild(otherOptGroup);
+            }
+        };
+        
+        // Initial update of options
+        updateOptions();
+        
+        // Add event listener for select changes
+        select.addEventListener('change', (e) => {
+            const newValue = e.target.value;
+            const oldValue = match.selectedOption;
+            
+            // If there was a previous selection, make it available again
+            if (oldValue && match.locked) {
+                usedSystem2Names.delete(oldValue);
+            }
+            
+            // Update match data
+            match.selectedOption = newValue || null;
+            
+            // Update UI
+            if (match.selectedOption) {
+                name2Cell.textContent = match.selectedOption;
+                name2Cell.style.fontStyle = 'normal';
+                name2Cell.style.color = 'inherit';
+                
+                // Enable lock button if on a select element's parent's siblings
+                const lockBtn = select.closest('.manual-match-area')
+                    .querySelector('.action-buttons .btn-info');
+                if (lockBtn) lockBtn.disabled = false;
+            } else {
+                name2Cell.textContent = 'No match selected';
+                name2Cell.style.fontStyle = 'italic';
+                name2Cell.style.color = '#999';
+                
+                // Disable lock button
+                const lockBtn = select.closest('.manual-match-area')
+                    .querySelector('.action-buttons .btn-info');
+                if (lockBtn) lockBtn.disabled = true;
+            }
+            
+            // Update status badge
+            statusCell.innerHTML = '';
+            statusCell.appendChild(getStatusBadge(match));
+            
+            // Update statistics
+            updateProgressRate();
+            
+            // Update all select dropdowns
+            updateAllDropdowns();
+        });
+        
+        return select;
+    }
+
+    function lockMatch(match, index, select, lockBtn, cancelBtn, name2Cell, statusCell) {
+        // Update match data
+        match.locked = true;
+        
+        // Add to used names
+        if (match.selectedOption) {
+            usedSystem2Names.add(match.selectedOption);
+        }
+        
+        // Update UI
+        select.disabled = true;
+        lockBtn.disabled = true;
+        cancelBtn.disabled = false;
+        
+        // Update cell appearance
+        name2Cell.classList.add('locked-match');
+        
+        // Update status
+        statusCell.innerHTML = '';
+        statusCell.appendChild(getStatusBadge(match));
+        
+        // Update statistics
+        updateStatistics();
+        
+        // Update all dropdowns to reflect newly used name
+        updateAllDropdowns();
+    }
+
+    function cancelMatch(match, index, select, lockBtn, cancelBtn, name2Cell, statusCell) {
+        // Remove from used names
+        if (match.selectedOption) {
+            usedSystem2Names.delete(match.selectedOption);
+        }
+        
+        // Update match data
+        match.locked = false;
+        
+        // Update UI
+        select.disabled = false;
+        lockBtn.disabled = !match.selectedOption;
+        cancelBtn.disabled = true;
+        
+        // Update cell appearance
+        name2Cell.classList.remove('locked-match');
+        
+        // Update status
+        statusCell.innerHTML = '';
+        statusCell.appendChild(getStatusBadge(match));
+        
+        // Update statistics
+        updateStatistics();
+        
+        // Update all dropdowns to reflect newly available name
+        updateAllDropdowns();
+    }
+
+    function updateAllDropdowns() {
+        // Find all the manual match rows and update their dropdowns
+        matchResults.forEach((match, index) => {
+            if (!match.isExactMatch) {
+                const select = document.getElementById(`match-select-${index}`);
+                if (select) {
+                    // Save current value
+                    const currentValue = select.value;
+                    
+                    // Clear options but keep the first default option
+                    while (select.options.length > 1) {
+                        select.remove(1);
+                    }
+                    
+                    // Create optgroups only once
+                    const bestMatchesGroup = document.createElement('optgroup');
+                    bestMatchesGroup.label = 'Best Matches';
+                    
+                    const otherOptionsGroup = document.createElement('optgroup');
+                    otherOptionsGroup.label = 'Other options';
+                    
+                    // Add best matches
+                    const availableOptions = match.options.filter(option => 
+                        !usedSystem2Names.has(option.name) || option.name === match.selectedOption
+                    );
+                    
+                    let bestMatchesAdded = false;
+                    if (availableOptions.length > 0) {
+                        availableOptions.forEach(option => {
+                            const optionElement = document.createElement('option');
+                            optionElement.value = option.name;
+                            optionElement.textContent = `${option.name} (${option.similarity}%)`;
+                            optionElement.selected = currentValue === option.name;
+                            bestMatchesGroup.appendChild(optionElement);
+                        });
+                        bestMatchesAdded = true;
+                    }
+                    
+                    // Add other available options
+                    const otherAvailableNames = system2NamesGlobal.filter(name => 
+                        !usedSystem2Names.has(name) || name === match.selectedOption
+                    );
+                    
+                    // Filter out names already in the top matches
+                    const otherNames = otherAvailableNames.filter(name => 
+                        !match.options.some(option => option.name === name)
+                    );
+                    
+                    let otherOptionsAdded = false;
+                    if (otherNames.length > 0) {
+                        otherNames.forEach(name => {
+                            const optionElement = document.createElement('option');
+                            optionElement.value = name;
+                            optionElement.textContent = name;
+                            optionElement.selected = currentValue === name;
+                            otherOptionsGroup.appendChild(optionElement);
+                        });
+                        otherOptionsAdded = true;
+                    }
+                    
+                    // Only add optgroups if they have children
+                    if (bestMatchesAdded) {
+                        select.appendChild(bestMatchesGroup);
+                    }
+                    
+                    if (otherOptionsAdded) {
+                        select.appendChild(otherOptionsGroup);
+                    }
+                    
+                    // If current value is not in the list anymore, reset selection
+                    if (select.selectedIndex === -1) {
+                        select.value = '';
+                    }
+                }
+            }
+        });
     }
 
     function exportResults() {
         const rows = [];
         // Add header row
-        rows.push(['System 1 Name', 'System 2 Match', 'Match Type']);
+        rows.push(['System 1 Name', 'System 2 Match', 'Match Type', 'Status']);
         
         // Add data rows
         matchResults.forEach(match => {
             const matchType = match.isExactMatch ? 'Exact' : 'Manual';
             const matchedName = match.isExactMatch ? match.name2 : (match.selectedOption || '');
+            const status = match.isExactMatch ? 'Locked (Exact)' : 
+                          (match.locked ? 'Locked (Manual)' : 
+                          (match.selectedOption ? 'Selected (Pending)' : 'Unmatched'));
             
             rows.push([
                 match.name1,
                 matchedName,
-                matchType
+                matchType,
+                status
             ]);
         });
         
@@ -363,7 +762,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
-        link.setAttribute('download', 'name_matches.csv');
+        
+        // Add timestamp to filename
+        const now = new Date();
+        const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        link.setAttribute('download', `name_matches_${timestamp}.csv`);
+        
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         link.click();
@@ -373,17 +777,21 @@ document.addEventListener('DOMContentLoaded', () => {
     function copyResultsToClipboard() {
         const rows = [];
         // Add header row
-        rows.push(['System 1 Name', 'System 2 Match', 'Match Type']);
+        rows.push(['System 1 Name', 'System 2 Match', 'Match Type', 'Status']);
         
         // Add data rows
         matchResults.forEach(match => {
             const matchType = match.isExactMatch ? 'Exact' : 'Manual';
             const matchedName = match.isExactMatch ? match.name2 : (match.selectedOption || '');
+            const status = match.isExactMatch ? 'Locked (Exact)' : 
+                          (match.locked ? 'Locked (Manual)' : 
+                          (match.selectedOption ? 'Selected (Pending)' : 'Unmatched'));
             
             rows.push([
                 match.name1,
                 matchedName,
-                matchType
+                matchType,
+                status
             ]);
         });
         
@@ -406,48 +814,56 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function getSampleSystem1Data() {
-        return `John Smith
-Robert Johnson
-Mary Williams
-Jennifer Brown
-Michael Miller
-Patricia Davis
-James Rodriguez
-Linda Martinez
-William Anderson
-Elizabeth Thomas
-David Wilson
-Barbara Thompson
-Richard Garcia
-Susan Martinez
-Joseph Robinson
-Jessica Clark
-Thomas Rodriguez
-Sarah Lewis
-Charles Walker
-Karen Hall`;
+        return `Seán O'Connor
+Niamh Ryan
+Ciaran Murphy
+Siobhan Walsh
+Eoghan O'Sullivan
+Aoife Kelly
+Padraig MacCarthy
+Orla Ó Dálaigh
+Cormac McDonnell
+Sorcha Fitzgerald
+Oisín Hickey
+Eve O Toole
+Donnacha Toner
+Cillian Redmond
+Viktoria Tropina
+Caoimhe Ní Dhomhnaill
+Sadhbh McGuinness
+Fionn O'Brien
+Saorlaith Willow Sweeney
+Isla Souto
+Boden Nelson Williams`;
     }
 
     function getSampleSystem2Data() {
-        return `John Smith
-Rob Johnson
-Mary J. Williams
-Jenifer Brown
-Mike Miller
-Patricia Davis-Wilson
-James Rodriguez
-Linda Martinez-Garcia
-Will Anderson
-Elisabeth Thomas
-David Wilson
-B. Thompson
-Rich Garcia
-Susan Martinez
-Joe Robinson
-Jessica Clarke
-Tom Rodriguez
-Sarah Lewis
-Chuck Walker
-Karen Hall`;
+        return `Sean O Connor
+Niamh Ryan
+Kieran Murphy
+Siobhan Walsh
+Eoghan OSullivan
+Aoife Kelly
+Paddy MacCarthy
+Orla O'Daly
+Cormac MacDonnell
+Sorcha Fitzgerald
+Oisin Hickey
+Eve O'Toole
+Donnacha Tóner
+Cillian Redmond
+Viktoriia Tropina
+Caoimhe Ni Dhomhnaill
+Sadhbh MacGuinness
+Fionn OBrien
+Saorlaith W. Sweeney
+Isla Souto
+Elsie Nelson Williams
+Boden Nelson Williams
+Freddie McGreal
+Beau Hayes Walsh
+Finn Doyle
+Caelan Jameson
+Aderewa Lori Dairo`;
     }
 });
