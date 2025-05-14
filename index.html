@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Name Matching Tool</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Name Matching Tool</h1>
+            <p>Match names between two systems easily and efficiently</p>
+        </header>
+
+        <div class="input-container">
+            <div class="input-group">
+                <div class="input-header">
+                    <h2>System 1 Names</h2>
+                    <span class="badge" id="system1-count">0</span>
+                </div>
+                <textarea id="system1" placeholder="Enter names from System 1, one per line..."></textarea>
+                <div class="controls">
+                    <button class="btn btn-secondary" id="clear-system1">
+                        <i class="fas fa-trash"></i> Clear
+                    </button>
+                    <button class="btn btn-secondary" id="sample-system1">
+                        <i class="fas fa-vial"></i> Sample Data
+                    </button>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <div class="input-header">
+                    <h2>System 2 Names (Truth)</h2>
+                    <span class="badge" id="system2-count">0</span>
+                </div>
+                <textarea id="system2" placeholder="Enter names from System 2, one per line..."></textarea>
+                <div class="controls">
+                    <button class="btn btn-secondary" id="clear-system2">
+                        <i class="fas fa-trash"></i> Clear
+                    </button>
+                    <button class="btn btn-secondary" id="sample-system2">
+                        <i class="fas fa-vial"></i> Sample Data
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="action-panel">
+            <div class="options">
+                <div class="matching-options">
+                    <h3>Matching Options</h3>
+                    <div class="option">
+                        <input type="checkbox" id="ignore-case" checked>
+                        <label for="ignore-case">Ignore case</label>
+                    </div>
+                    <div class="option">
+                        <input type="checkbox" id="trim-whitespace" checked>
+                        <label for="trim-whitespace">Trim whitespace</label>
+                    </div>
+                    <div class="option">
+                        <input type="checkbox" id="fuzzy-matching">
+                        <label for="fuzzy-matching">Fuzzy matching</label>
+                    </div>
+                </div>
+                <div class="algo-selector">
+                    <label for="algorithm">Matching Algorithm:</label>
+                    <select id="algorithm">
+                        <option value="exact">Exact Match</option>
+                        <option value="levenshtein">Levenshtein Distance</option>
+                        <option value="soundex">Soundex</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-primary" id="match-btn">
+                <i class="fas fa-link"></i> Match Names
+            </button>
+        </div>
+
+        <div class="results-container" id="results-container">
+            <h2>Matching Results</h2>
+            <div class="stats-panel">
+                <div class="stat-box">
+                    <span class="stat-label">Matched</span>
+                    <span class="stat-value" id="matched-count">0</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Unmatched</span>
+                    <span class="stat-value" id="unmatched-count">0</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Match Rate</span>
+                    <span class="stat-value" id="match-rate">0%</span>
+                </div>
+            </div>
+            <div class="results-actions">
+                <button class="btn btn-secondary" id="export-btn">
+                    <i class="fas fa-file-export"></i> Export Results
+                </button>
+                <button class="btn btn-secondary" id="copy-btn">
+                    <i class="fas fa-copy"></i> Copy to Clipboard
+                </button>
+            </div>
+            <div class="results-table-container">
+                <table class="results-table" id="results-table">
+                    <thead>
+                        <tr>
+                            <th>System 1 Name</th>
+                            <th>System 2 Match</th>
+                            <th>Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-body">
+                        <!-- Results will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <footer>
+            <p>© 2025 Name Matching Tool | Created with <i class="fas fa-heart"></i> by Vladislav</p>
+        </footer>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
